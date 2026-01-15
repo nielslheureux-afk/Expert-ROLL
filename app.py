@@ -24,10 +24,9 @@ safety_settings = {
 
 # CHANGEMENT ICI : Passage au modèle 1.5 Flash pour un quota plus élevé
 model = genai.GenerativeModel(
-    model_name='gemini-1.5-flash', 
+    model_name='gemini-1.5-flash-001', # On précise la version exacte
     safety_settings=safety_settings
 )
-
 # 2. INTERFACE STREAMLIT
 st.set_page_config(page_title="Expert ROLL", page_icon="📖", layout="wide")
 st.title("🤖 Expert ROLL : Générateur d'ACT")
@@ -92,6 +91,7 @@ if uploaded_file is not None:
         
         except Exception as e:
             st.error(f"Une erreur est survenue : {e}")
+
 
 
 
