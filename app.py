@@ -4,17 +4,22 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from docx import Document
 import os
 
-# 1. CONFIGURATION DE L'IA (SÉCURISÉE ET FORCÉE EN V1)
+# --- 1. CONFIGURATION DE LA PAGE ---
+st.set_page_config(page_title="Expert ROLL", page_icon="📖", layout="wide")
+
+# --- 2. GESTION SÉCURISÉE DE LA CLÉ API ---
+# On récupère la clé depuis les "Secrets" de Streamlit
 api_key = os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
-    st.error("ERREUR : La clé API est manquante dans les Secrets.")
+    st.error("⚠️ La clé API est manquante. Veuillez la configurer dans les Settings > Secrets de Streamlit.")
     st.stop()
 
-# Le paramètre transport='rest' force l'utilisation de l'API stable (v1)
+# Configuration forcée en mode 'rest' pour éviter l'erreur 404/v1beta
 genai.configure(api_key=api_key, transport='rest')
 
-# Configuration du modèle 1.5 Flash (le plus généreux en quota)
+# --- 3. CONFIGURATION DU MODÈLE ---
+# On utilise Gemini 1.5 Flash (le plus performant pour les quotas gratuits)
 safety_settings = {
     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
     HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
@@ -23,59 +28,79 @@ safety_settings = {
 }
 
 model = genai.GenerativeModel(
-    model_name='gemini-pro', 
+    model_name='gemini-1.5-flash',
     safety_settings=safety_settings
 )
-# 2. INTERFACE STREAMLIT
-st.set_page_config(page_title="Expert ROLL", page_icon="📖")
+
+# --- 4. INTERFACE UTILISATEUR ---
 st.title("🤖 Expert ROLL : Générateur d'ACT")
+st.markdown("Cet outil génère une fiche d'Atelier de Compréhension de Texte (ACT) basée sur la pédagogie du ROLL.")
 
-cycle_choisi = st.radio(
-    "Pour quel niveau souhaitez-vous préparer cet ACT ?",
-    ["Cycle 2 (CP, CE1, CE2)", "Cycle 3 (CM1, CM2, 6ème)"],
-    index=0
-)
+col1, col2 = st.columns([1, 1])
 
-uploaded_file = st.file_uploader("Chargez votre texte (Image, PDF ou Word)", type=['pdf', 'docx', 'jpg', 'jpeg', 'png'])
+with col1:
+    cycle_choisi = st.radio(
+        "Niveau scolaire :",
+        ["Cycle 2 (CP, CE1, CE2)", "Cycle 3 (CM1, CM2, 6ème)"],
+        index=0
+    )
 
-# 3. LOGIQUE PEDAGOGIQUE
+with col2:
+    uploaded_file = st.file_uploader("Document (Image, PDF ou Word)", type=['pdf', 'docx', 'jpg', 'jpeg', 'png'])
+
+# --- 5. LOGIQUE PÉDAGOGIQUE ---
 def obtenir_prompt(cycle):
     base_prompt = """
-    Agis en tant qu'expert pédagogique du ROLL. 
-    Conçois un Atelier de Compréhension de Texte (ACT) à partir du document fourni.
-    Structure :
-    1. ANALYSE DU SUPPORT (Obstacles, inférences).
-    2. PHASE 1 : Lecture individuelle.
-    3. PHASE 2 : Émergence des représentations (3 questions + tableau 'D'accord/Pas d'accord').
-    4. PHASE 3 : Confrontation au texte.
-    5. PHASE 4 : Métacognition.
-    IMPORTANT : Ne recopie pas le texte original (droits d'auteur).
+    Agis en tant qu'expert pédagogique du ROLL (Réseau des Observatoires Locaux de la Lecture). 
+    Ta mission est de concevoir un Atelier de Compréhension de Texte (ACT) à partir du document fourni.
+    
+    Structure de la réponse :
+    1. ANALYSE DU SUPPORT : Obstacles de compréhension (inférences, lexique), intentions des personnages.
+    2. PHASE 1 : Consignes de lecture individuelle.
+    3. PHASE 2 (Émergence) : Propose 3 questions ouvertes pour lancer le débat.
+    4. TABLEAU DÉBAT : Génère un tableau avec 3 affirmations 'D'accord / Pas d'accord / On ne sait pas'.
+    5. PHASE 3 (Arbitrage) : Comment guider les élèves vers la preuve dans le texte.
+    6. PHASE 4 (Métacognition) : Stratégie de lecture travaillée.
+    
+    IMPORTANT : Ne recopie pas l'intégralité du texte original par respect des droits d'auteur.
     """
+    
     if "Cycle 2" in cycle:
-        return base_prompt + " CONSIGNE CYCLE 2 : Focalise sur la chronologie et les sentiments explicites."
+        return base_prompt + "\nCONSIGNE SPÉCIFIQUE CYCLE 2 : Focalise sur la chronologie et les sentiments explicites."
     else:
-        return base_prompt + " CONSIGNE CYCLE 3 : Focalise sur l'implicite complexe et les non-dits."
+        return base_prompt + "\nCONSIGNE SPÉCIFIQUE CYCLE 3 : Focalise sur l'implicite complexe et les intentions cachées."
 
-# 4. TRAITEMENT
+# --- 6. TRAITEMENT ET GÉNÉRATION ---
 if uploaded_file is not None:
-    with st.spinner('L\'IA analyse votre document...'):
-        try:
-            prompt_final = obtenir_prompt(cycle_choisi)
-            
-            if uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-                doc = Document(uploaded_file)
-                text = "\n".join([p.text for p in doc.paragraphs])
-                content = [prompt_final, f"Texte : \n{text}"]
-            else:
-                file_data = uploaded_file.read()
-                content = [prompt_final, {"mime_type": uploaded_file.type, "data": file_data}]
+    if st.button("Générer la fiche pédagogique"):
+        with st.spinner('Analyse pédagogique en cours...'):
+            try:
+                prompt_final = obtenir_prompt(cycle_choisi)
+                
+                # Préparation du contenu pour l'IA
+                if uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+                    doc = Document(uploaded_file)
+                    text_content = "\n".join([p.text for p in doc.paragraphs])
+                    content = [prompt_final, f"Voici le texte à analyser :\n{text_content}"]
+                else:
+                    # PDF ou Images
+                    file_data = uploaded_file.read()
+                    content = [prompt_final, {"mime_type": uploaded_file.type, "data": file_data}]
 
-            response = model.generate_content(content)
+                # Appel à l'IA
+                response = model.generate_content(content)
 
-            if response.text:
-                st.success(f"Fiche {cycle_choisi} générée !")
-                st.markdown(response.text)
-                st.download_button("Télécharger la fiche", response.text, file_name="fiche_ROLL.txt")
-        except Exception as e:
-            st.error(f"Une erreur est survenue : {e}")
-
+                if response.text:
+                    st.success("✅ Fiche générée avec succès !")
+                    st.markdown("---")
+                    st.markdown(response.text)
+                    
+                    # Option de téléchargement
+                    st.download_button(
+                        label="📥 Télécharger la fiche (Texte)",
+                        data=response.text,
+                        file_name=f"ACT_ROLL_{cycle_choisi.split()[0]}.txt",
+                        mime="text/plain"
+                    )
+            except Exception as e:
+                st.error(f"Une erreur est survenue : {e}")
