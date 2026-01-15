@@ -2,10 +2,10 @@ import streamlit as st
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from docx import Document
-import os # Indispensable pour lire les secrets
+import os
 
 # 1. CONFIGURATION DE L'IA (SÉCURISÉE)
-# On récupère la clé via le système, pas en l'écrivant ici
+# Récupération de la clé API via les Secrets de Streamlit
 api_key = os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
@@ -22,8 +22,9 @@ safety_settings = {
     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
 }
 
+# CHANGEMENT ICI : Passage au modèle 1.5 Flash pour un quota plus élevé
 model = genai.GenerativeModel(
-    model_name='gemini-2.5-flash',
+    model_name='gemini-1.5-flash', 
     safety_settings=safety_settings
 )
 
@@ -31,7 +32,6 @@ model = genai.GenerativeModel(
 st.set_page_config(page_title="Expert ROLL", page_icon="📖", layout="wide")
 st.title("🤖 Expert ROLL : Générateur d'ACT")
 
-# Nouveau : Sélection du niveau pour adapter la difficulté
 cycle_choisi = st.radio(
     "Pour quel niveau souhaitez-vous préparer cet ACT ?",
     ["Cycle 2 (CP, CE1, CE2)", "Cycle 3 (CM1, CM2, 6ème)"],
@@ -40,7 +40,7 @@ cycle_choisi = st.radio(
 
 uploaded_file = st.file_uploader("Chargez votre texte (Image, PDF ou Word)", type=['pdf', 'docx', 'jpg', 'jpeg', 'png'])
 
-# 3. LOGIQUE PEDAGOGIQUE DYNAMIQUE
+# 3. LOGIQUE PEDAGOGIQUE
 def obtenir_prompt(cycle):
     base_prompt = """
     Agis en tant qu'expert pédagogique du ROLL. 
@@ -53,25 +53,24 @@ def obtenir_prompt(cycle):
     4. PHASE 3 : Confrontation au texte (arbitrage).
     5. PHASE 4 : Métacognition (stratégies de lecture).
     
-    IMPORTANT : Ne recopie pas le texte original par respect des droits d'auteur, produis uniquement l'analyse.
+    IMPORTANT : Ne recopie pas le texte original par respect des droits d'auteur.
     """
     
     if "Cycle 2" in cycle:
         return base_prompt + """
-        CONSIGNE SPECIFIQUE CYCLE 2 : Focalise sur la compréhension littérale, la chronologie et les sentiments explicites. 
-        Utilise un vocabulaire simple pour les questions. Aide les élèves à identifier 'Qui fait quoi'."""
+        CONSIGNE CYCLE 2 : Focalise sur la compréhension littérale, la chronologie et les sentiments explicites. 
+        Utilise un vocabulaire simple pour les questions."""
     else:
         return base_prompt + """
-        CONSIGNE SPECIFIQUE CYCLE 3 : Focalise sur l'implicite complexe, les non-dits et l'évolution psychologique des personnages. 
-        Pousse l'analyse sur les 'blancs' du texte et les interprétations divergentes."""
+        CONSIGNE CYCLE 3 : Focalise sur l'implicite complexe, les non-dits et l'évolution psychologique des personnages."""
 
 # 4. TRAITEMENT DU FICHIER
 if uploaded_file is not None:
-    with st.spinner(f'Analyse en cours pour le {cycle_choisi}...'):
+    with st.spinner(f'Analyse en cours avec Gemini 1.5 Flash...'):
         try:
             prompt_final = obtenir_prompt(cycle_choisi)
             
-            # Gestion du format Word
+            # Gestion Word
             if uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
                 doc = Document(uploaded_file)
                 text = "\n".join([p.text for p in doc.paragraphs])
@@ -84,15 +83,12 @@ if uploaded_file is not None:
             # Appel à l'IA
             response = model.generate_content(content)
 
-            # Affichage sécurisé des résultats
-            if response.candidates and len(response.candidates[0].content.parts) > 0:
+            # Affichage des résultats
+            if response.candidates:
                 resultat = response.candidates[0].content.parts[0].text
                 st.success(f"Fiche {cycle_choisi} générée !")
                 st.markdown(resultat)
                 st.download_button("Télécharger la fiche", resultat, file_name=f"ACT_ROLL_{cycle_choisi}.txt")
-            else:
-                st.error("L'IA n'a pas pu produire de texte. Vérifiez la lisibilité du document.")
-
+        
         except Exception as e:
-
             st.error(f"Une erreur est survenue : {e}")
