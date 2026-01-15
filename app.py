@@ -23,10 +23,9 @@ safety_settings = {
 }
 
 model = genai.GenerativeModel(
-    model_name='gemini-1.5-flash',
+    model_name='gemini-pro', 
     safety_settings=safety_settings
 )
-
 # 2. INTERFACE STREAMLIT
 st.set_page_config(page_title="Expert ROLL", page_icon="📖")
 st.title("🤖 Expert ROLL : Générateur d'ACT")
@@ -79,3 +78,4 @@ if uploaded_file is not None:
                 st.download_button("Télécharger la fiche", response.text, file_name="fiche_ROLL.txt")
         except Exception as e:
             st.error(f"Une erreur est survenue : {e}")
+
