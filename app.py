@@ -4,34 +4,32 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from docx import Document
 import os
 
-# --- 1. CONFIGURATION DE LA PAGE ---
+# --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Expert ROLL", page_icon="📖")
 
-# --- 2. CONFIGURATION DE L'API ---
+# --- CONFIGURATION DE L'API (CORRECTIF 404) ---
 api_key = os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
     st.error("Clé API manquante dans les Secrets de Streamlit.")
     st.stop()
 
-# FORCE LE PASSAGE EN V1 (STABLE) VIA LE TRANSPORT 'REST'
+# ÉTAPE CRUCIALE : On force l'API stable 'v1' et le transport 'rest'
+# Cela empêche l'erreur 'v1beta' que vous voyez
 genai.configure(api_key=api_key, transport='rest')
 
-# --- 3. CONFIGURATION DU MODÈLE ---
-safety_settings = {
-    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-}
-
-# Utilisation du modèle 1.5 Flash
+# On définit le modèle explicitement
 model = genai.GenerativeModel(
     model_name='gemini-1.5-flash',
-    safety_settings=safety_settings
+    safety_settings={
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+    }
 )
 
-# --- 4. INTERFACE ---
+# --- INTERFACE ---
 st.title("🤖 Expert ROLL : Générateur d'ACT")
 
 cycle_choisi = st.radio(
@@ -41,20 +39,21 @@ cycle_choisi = st.radio(
 
 uploaded_file = st.file_uploader("Document (Image, PDF ou Word)", type=['pdf', 'docx', 'jpg', 'jpeg', 'png'])
 
-# --- 5. LOGIQUE ---
+# --- LOGIQUE ---
 def obtenir_prompt(cycle):
-    base_prompt = "Agis en tant qu'expert pédagogique du ROLL. Conçois un Atelier de Compréhension de Texte (ACT) avec analyse du support, phase d'émergence (3 questions), tableau débat et métacognition. Ne recopie pas le texte original."
+    base_prompt = "Agis en tant qu'expert pédagogique du ROLL. Conçois un Atelier de Compréhension de Texte (ACT) complet. Ne recopie pas le texte original."
     if "Cycle 2" in cycle:
         return base_prompt + " Focus : chronologie et explicite."
     return base_prompt + " Focus : implicite et intentions des personnages."
 
-# --- 6. GÉNÉRATION ---
+# --- GÉNÉRATION ---
 if uploaded_file is not None:
     if st.button("Générer la fiche"):
         with st.spinner('Analyse en cours...'):
             try:
                 prompt = obtenir_prompt(cycle_choisi)
                 
+                # Gestion du contenu
                 if uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
                     doc = Document(uploaded_file)
                     text = "\n".join([p.text for p in doc.paragraphs])
@@ -71,4 +70,4 @@ if uploaded_file is not None:
                     st.markdown(response.text)
                     st.download_button("Télécharger", response.text, file_name="fiche_roll.txt")
             except Exception as e:
-                st.error(f"Erreur : {e}")
+                st.error(f"Détails de l'erreur : {e}")
