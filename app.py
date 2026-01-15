@@ -2,10 +2,17 @@ import streamlit as st
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from docx import Document
+import os # Indispensable pour lire les secrets
 
-# 1. CONFIGURATION DE L'IA
-# Remplacez bien 'VOTRE_CLE_API' par votre véritable clé
-genai.configure(api_key="AIzaSyAiRPVBddpl0da12mhDTejPbj9_HyGw8Ss")
+# 1. CONFIGURATION DE L'IA (SÉCURISÉE)
+# On récupère la clé via le système, pas en l'écrivant ici
+api_key = os.environ.get("GEMINI_API_KEY")
+
+if not api_key:
+    st.error("ERREUR : La clé API est manquante dans les Secrets.")
+    st.stop()
+
+genai.configure(api_key=api_key)
 
 # Réglages de sécurité pour éviter les blocages sur les albums jeunesse
 safety_settings = {
@@ -87,4 +94,5 @@ if uploaded_file is not None:
                 st.error("L'IA n'a pas pu produire de texte. Vérifiez la lisibilité du document.")
 
         except Exception as e:
+
             st.error(f"Une erreur est survenue : {e}")
