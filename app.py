@@ -7,73 +7,69 @@ from docx import Document
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Expert ROLL", page_icon="📖")
 
-# On récupère la clé Gemini (assurez-vous qu'elle est dans vos Secrets)
 api_key = os.environ.get("GEMINI_API_KEY")
-
 if not api_key:
-    st.title("Expert ROLL")
-    st.info("Veuillez configurer la GEMINI_API_KEY dans les Secrets.")
+    st.error("Clé API manquante dans les Secrets.")
     st.stop()
 
 genai.configure(api_key=api_key)
-model = genai.GenerativeModel('gemini-1.5-flash')
 
-# --- 2. FONCTION WORD ---
+# --- 2. DÉTECTION DYNAMIQUE (Pour éviter l'erreur 404) ---
+@st.cache_resource
+def find_working_model():
+    try:
+        # On liste les modèles pour trouver le nom exact utilisé en 2026
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                # On cherche un modèle Flash (pour le quota gratuit)
+                if 'flash' in m.name.lower():
+                    return m.name
+        return "models/gemini-pro" # Secours
+    except:
+        return "gemini-1.5-flash" # Dernier recours
+
+target_model_name = find_working_model()
+model = genai.GenerativeModel(target_model_name)
+
+# --- 3. FONCTION WORD ---
 def create_docx(text, cycle_name):
     doc = Document()
     doc.add_heading(f"Fiche ACT ROLL - {cycle_name}", 0)
     for line in text.split('\n'):
-        clean_line = line.replace('*', '').replace('#', '').strip()
-        if clean_line:
-            doc.add_paragraph(clean_line)
+        clean = line.replace('*', '').replace('#', '').strip()
+        if clean:
+            doc.add_paragraph(clean)
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
     return buffer
 
-# --- 3. INTERFACE ---
-st.title("Expert ROLL (Mode Haute Qualité)")
-st.caption("Moteur : Gemini 1.5 Flash - Specialiste Pédagogie")
+# --- 4. INTERFACE ---
+st.title("Expert ROLL")
+st.caption(f"Connecté via : {target_model_name}")
 
-cycle = st.radio("Niveau scolaire :", ["Cycle 2", "Cycle 3"])
+cycle = st.radio("Niveau :", ["Cycle 2", "Cycle 3"])
 uploaded_file = st.file_uploader("Fichier Word (.docx)", type=['docx'])
 
-if uploaded_file is not None:
-    if st.button("Lancer l'analyse pédagogique"):
-        with st.spinner('Gemini analyse les subtilités du texte...'):
-            try:
-                # Lecture Word
-                doc_in = Document(uploaded_file)
-                full_text = "\n".join([p.text for p in doc_in.paragraphs])
+if uploaded_file and st.button("Lancer l'analyse"):
+    with st.spinner('Analyse ROLL en cours...'):
+        try:
+            doc_in = Document(uploaded_file)
+            content = "\n".join([p.text for p in doc_in.paragraphs])
 
-                # PROMPT EXPERT ROLL (Plus précis pour une meilleure qualité)
-                prompt = f"""Tu es un expert du Réseau des Observatoires Locaux de la Lecture (ROLL). 
-                Ton objectif est de créer un Atelier de Compréhension de Texte (ACT) de haute qualité pour le {cycle}.
-                
-                Consignes strictes :
-                1. ANALYSE DES OBSTACLES : Identifie précisément les pièges du texte (implicite, lexique complexe, connecteurs logiques, culture de référence). Ne sois pas générique.
-                2. QUESTIONS D'ÉMERGENCE : Propose 3 questions ouvertes qui forcent les élèves à confronter leurs représentations mentales.
-                3. TABLEAU DÉBAT : Crée 4 affirmations subtiles (ni trop simples, ni impossibles) pour provoquer un débat interprétatif riche.
-                
-                TEXTE À ANALYSER :
-                {full_text}
-                """
+            prompt = f"""Expert ROLL. Crée un ACT pour le {cycle}. 
+            1. Analyse précise des obstacles (lexique, implicite). 
+            2. 3 questions d'émergence. 
+            3. Tableau débat Vrai/Faux.
+            Texte : {content}"""
 
-                response = model.generate_content(prompt)
-                
-                st.markdown("---")
-                st.markdown(response.text)
-                
-                docx_output = create_docx(response.text, cycle)
-                st.download_button(
-                    label="Télécharger en Word",
-                    data=docx_output,
-                    file_name="ACT_ROLL_Gemini.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
-
-            except Exception as e:
-                if "429" in str(e):
-                    st.error("Trop de demandes. Attends 60 secondes.")
-                else:
-                    st.error(f"Erreur : {e}")
+            response = model.generate_content(prompt)
+            
+            st.markdown("---")
+            st.markdown(response.text)
+            
+            docx_output = create_docx(response.text, cycle)
+            st.download_button("Télécharger en Word", data=docx_output, file_name="ACT_ROLL.docx")
+            
+        except Exception as e:
+            st.error(f"Détails de l'erreur : {e}")
