@@ -1,5 +1,5 @@
 import streamlit as st
-from groq import Groq
+import google.generativeai as genai
 import os
 import io
 from docx import Document
@@ -7,17 +7,18 @@ from docx import Document
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Expert ROLL", page_icon="📖")
 
-# --- 2. INITIALISATION ---
-api_key = os.environ.get("GROQ_API_KEY")
+# On récupère la clé Gemini (assurez-vous qu'elle est dans vos Secrets)
+api_key = os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
     st.title("Expert ROLL")
-    st.info("Veuillez configurer la GROQ_API_KEY dans les Secrets.")
+    st.info("Veuillez configurer la GEMINI_API_KEY dans les Secrets.")
     st.stop()
 
-client = Groq(api_key=api_key)
+genai.configure(api_key=api_key)
+model = genai.GenerativeModel('gemini-1.5-flash')
 
-# --- 3. FONCTION WORD ---
+# --- 2. FONCTION WORD ---
 def create_docx(text, cycle_name):
     doc = Document()
     doc.add_heading(f"Fiche ACT ROLL - {cycle_name}", 0)
@@ -30,47 +31,49 @@ def create_docx(text, cycle_name):
     buffer.seek(0)
     return buffer
 
-# --- 4. INTERFACE ---
-st.title("Expert ROLL")
-st.caption("Analyse pedagogique via Llama 3.3")
+# --- 3. INTERFACE ---
+st.title("Expert ROLL (Mode Haute Qualité)")
+st.caption("Moteur : Gemini 1.5 Flash - Specialiste Pédagogie")
 
 cycle = st.radio("Niveau scolaire :", ["Cycle 2", "Cycle 3"])
 uploaded_file = st.file_uploader("Fichier Word (.docx)", type=['docx'])
 
-# --- 5. GENERATION ---
 if uploaded_file is not None:
-    if st.button("Lancer la generation"):
-        with st.spinner('Analyse en cours...'):
+    if st.button("Lancer l'analyse pédagogique"):
+        with st.spinner('Gemini analyse les subtilités du texte...'):
             try:
                 # Lecture Word
                 doc_in = Document(uploaded_file)
                 full_text = "\n".join([p.text for p in doc_in.paragraphs])
+
+                # PROMPT EXPERT ROLL (Plus précis pour une meilleure qualité)
+                prompt = f"""Tu es un expert du Réseau des Observatoires Locaux de la Lecture (ROLL). 
+                Ton objectif est de créer un Atelier de Compréhension de Texte (ACT) de haute qualité pour le {cycle}.
                 
-                if len(full_text.strip()) < 5:
-                    st.error("Document vide.")
-                    st.stop()
+                Consignes strictes :
+                1. ANALYSE DES OBSTACLES : Identifie précisément les pièges du texte (implicite, lexique complexe, connecteurs logiques, culture de référence). Ne sois pas générique.
+                2. QUESTIONS D'ÉMERGENCE : Propose 3 questions ouvertes qui forcent les élèves à confronter leurs représentations mentales.
+                3. TABLEAU DÉBAT : Crée 4 affirmations subtiles (ni trop simples, ni impossibles) pour provoquer un débat interprétatif riche.
+                
+                TEXTE À ANALYSER :
+                {full_text}
+                """
 
-                prompt = f"Expert ROLL. Concois un ACT pour le {cycle}. Analyse obstacles, 3 questions, tableau debat. Texte : {full_text}"
-
-                # Appel Groq
-                completion = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.5
-                )
-
-                resultat = completion.choices[0].message.content
+                response = model.generate_content(prompt)
+                
                 st.markdown("---")
-                st.markdown(resultat)
+                st.markdown(response.text)
                 
-                # Telechargement
-                docx_output = create_docx(resultat, cycle)
+                docx_output = create_docx(response.text, cycle)
                 st.download_button(
-                    label="Telecharger en Word",
+                    label="Télécharger en Word",
                     data=docx_output,
-                    file_name="ACT_ROLL.docx",
+                    file_name="ACT_ROLL_Gemini.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
 
             except Exception as e:
-                st.error(f"Erreur : {e}")
+                if "429" in str(e):
+                    st.error("Trop de demandes. Attends 60 secondes.")
+                else:
+                    st.error(f"Erreur : {e}")
