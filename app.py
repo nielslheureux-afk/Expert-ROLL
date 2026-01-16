@@ -18,8 +18,8 @@ if not api_key:
 genai.configure(api_key=api_key)
 model = genai.GenerativeModel('gemini-2.5-flash')
 
-# --- 2. MOTEUR DE RENDU WORD AVEC VRAI TABLEAU ---
-def create_roll_docx_with_table(text_content, cycle_name):
+# --- 2. MOTEUR DE RENDU WORD INTELLIGENT ---
+def create_roll_docx_faithful(text_content, cycle_name):
     doc = Document()
     doc.styles['Normal'].font.name = 'Arial'
     doc.styles['Normal'].font.size = Pt(11)
@@ -28,15 +28,23 @@ def create_roll_docx_with_table(text_content, cycle_name):
     title = doc.add_heading(f"FICHE ENSEIGNANT : ACT TYPE 1 - {cycle_name}", 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    sections = text_content.split('\n')
-    
-    for line in sections:
+    lines = text_content.split('\n')
+    for line in lines:
         clean_line = line.strip()
         if not clean_line: continue
 
         # Gestion des Titres
         if clean_line.startswith(('#', '1.', '2.', '3.', '4.')) or "PHASE" in clean_line.upper():
             doc.add_heading(clean_line.replace('#', '').strip(), level=1)
+        
+        # Détection et création de TABLEAU (si l'IA utilise des séparateurs | )
+        elif "|" in clean_line and "---" not in clean_line:
+            parts = [p.strip() for p in clean_line.split("|") if p.strip()]
+            if len(parts) >= 2:
+                table = doc.add_table(rows=1, cols=len(parts))
+                table.style = 'Table Grid'
+                for i, part in enumerate(parts):
+                    table.rows[0].cells[i].text = part
         
         # Gestion du Gras
         elif '**' in clean_line:
@@ -53,22 +61,6 @@ def create_roll_docx_with_table(text_content, cycle_name):
         else:
             doc.add_paragraph(clean_line)
 
-    # --- AJOUT DU TABLEAU DE CONTROVERSE RÉEL ---
-    doc.add_page_break()
-    doc.add_heading("OUTIL : TABLEAU DE CONFRONTATION DES REPRÉSENTATIONS", level=2)
-    
-    # Création d'un tableau vide structuré (3 colonnes ROLL)
-    table = doc.add_table(rows=1, cols=3)
-    table.style = 'Table Grid'
-    hdr_cells = table.rows[0].cells
-    hdr_cells[0].text = "On est d'accord"
-    hdr_cells[1].text = "On n'est pas d'accord"
-    hdr_cells[2].text = "On ne sait pas"
-    
-    # On ajoute 6 lignes prêtes à l'emploi pour les élèves
-    for _ in range(6):
-        table.add_row()
-
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
@@ -76,12 +68,11 @@ def create_roll_docx_with_table(text_content, cycle_name):
 
 # --- 3. INTERFACE ---
 st.title("🤖 Expert ROLL")
-
 cycle = st.radio("Cycle concerné :", ["Cycle 2", "Cycle 3"])
 uploaded_file = st.file_uploader("Support (Word, PDF ou Photo)", type=['docx', 'pdf', 'jpg', 'jpeg', 'png'])
 
 if uploaded_file and st.button("🚀 Générer la fiche complète"):
-    with st.spinner('Construction de la fiche méthodologique...'):
+    with st.spinner('Construction de la fiche avec tableau pré-rempli...'):
         try:
             raw_content = ""
             file_data = None
@@ -94,38 +85,10 @@ if uploaded_file and st.button("🚀 Générer la fiche complète"):
             else:
                 file_data = {"mime_type": uploaded_file.type, "data": uploaded_file.getvalue()}
 
-            # UTILISATION DE VOTRE PROMPT SATISFAISANT
+            # PROMPT AVEC DEMANDE EXPLICITE DE TABLEAU PRÉ-REMPLI
             instruction = f"""Agis en tant qu'expert pédagogique du ROLL. Rédige une fiche enseignant complète pour un ACT de type 1 (narratif) pour le {cycle}.
-            Respecte scrupuleusement les 4 phases :
-            1. Identification du support.
-            2. Objectifs (Habiletés ROLL : personnages, inférences).
-            3. Déroulement : 
-               - Phase 1 (Lecture individuelle).
-               - Phase 2 (Émergence) : 3 questions ouvertes + exemples de points de controverse.
-               - Phase 3 (Analyse/Vérification) : Retour au texte (lignes/mots).
-               - Phase 4 (Métacognition).
-            4. Prolongements.
+            Respecte scrupuleusement les 4 phases. 
             
-            Texte : {raw_content if not file_data else 'Analyse l image jointe.'}
-            """
-
-            if file_data:
-                response = model.generate_content([instruction, file_data])
-            else:
-                response = model.generate_content(instruction)
-            
-            st.markdown("---")
-            st.markdown(response.text)
-            
-            # On génère le Word avec la nouvelle fonction de tableau
-            docx_output = create_roll_docx_with_table(response.text, cycle)
-            
-            st.download_button(
-                label="📥 Télécharger la Fiche Word (avec Tableau)",
-                data=docx_output,
-                file_name=f"ACT_ROLL_{cycle}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-            
-        except Exception as e:
-            st.error(f"Erreur : {e}")
+            IMPORTANT pour la Phase 2 : 
+            Génère un tableau pré-rempli pour l'enseignant avec des exemples de propositions probables des élèves, classées en 3 colonnes : 
+            - "Ce qu'on sait (certitudes)"
