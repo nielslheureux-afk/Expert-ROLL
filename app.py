@@ -66,8 +66,8 @@ st.title("🤖 Expert ROLL")
 cycle = st.radio("Cycle concerné :", ["Cycle 2", "Cycle 3"])
 uploaded_file = st.file_uploader("Support (Word, PDF ou Photo)", type=['docx', 'pdf', 'jpg', 'jpeg', 'png'])
 
-if uploaded_file and st.button("🚀 Générer la fiche complète"):
-    with st.spinner('Construction de la fiche...'):
+if uploaded_file and st.button("🚀 Générer l'analyse spécifique"):
+    with st.spinner('Analyse fine des obstacles textuels en cours...'):
         try:
             raw_content = ""
             file_data = None
@@ -80,13 +80,17 @@ if uploaded_file and st.button("🚀 Générer la fiche complète"):
             else:
                 file_data = {"mime_type": uploaded_file.type, "data": uploaded_file.getvalue()}
 
-            # CONSTRUCTION DU PROMPT SÉCURISÉE
-            instruction = f"Agis en tant qu'expert pédagogique du ROLL. Rédige une fiche enseignant complète pour un ACT de type 1 (narratif) pour le {cycle}. "
-            instruction += "Respecte scrupuleusement les 4 phases (Identification, Objectifs, Déroulement en 4 phases, Prolongements). "
-            instruction += "IMPORTANT pour la Phase 2 : Génère un tableau pré-rempli pour l'enseignant avec des exemples de propositions probables des élèves, classées en 3 colonnes : 'Ce qu'on sait (certitudes)', 'On n'est pas d'accord (controverses)', 'On ne sait pas (zones d'ombre)'. "
+            # CONSTRUCTION DU PROMPT AVEC FOCUS SUR LES OBSTACLES SPÉCIFIQUES
+            instruction = f"Agis en tant qu'expert pédagogique du ROLL. Rédige une fiche enseignant complète pour un ACT de type 1 pour le {cycle}. "
+            instruction += "Dans la section 'Objectifs de compréhension', identifie de manière très précise les OBSTACLES SPÉCIFIQUES à ce texte : "
+            instruction += "- Lexique complexe ou polysémique présent dans le texte. "
+            instruction += "- Ruptures de la chaîne anaphorique (pronoms qui peuvent perdre l'élève). "
+            instruction += "- Inférences nécessaires pour comprendre l'implicite de cette histoire précise. "
+            instruction += "Respecte les 4 phases habituelles. "
+            instruction += "Phase 2 : Propose le tableau pré-rempli avec 3 colonnes (Certitudes, Controverses, Zones d'ombre) basé sur les pièges identifiés plus haut. "
             
             if file_data:
-                prompt_final = [instruction + " Analyse l'image jointe.", file_data]
+                prompt_final = [instruction + " Analyse l'image jointe pour identifier ces obstacles.", file_data]
             else:
                 prompt_final = instruction + f" Texte de référence : {raw_content}"
 
@@ -96,7 +100,7 @@ if uploaded_file and st.button("🚀 Générer la fiche complète"):
             st.markdown(response.text)
             
             docx_output = create_roll_docx_faithful(response.text, cycle)
-            st.download_button(label="📥 Télécharger la Fiche Word", data=docx_output, file_name=f"ACT_ROLL_{cycle}.docx")
+            st.download_button(label="📥 Télécharger la Fiche Expert Word", data=docx_output, file_name=f"ACT_ROLL_Expert_{cycle}.docx")
             
         except Exception as e:
             st.error(f"Erreur : {e}")
