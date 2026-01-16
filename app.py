@@ -4,65 +4,51 @@ import os
 import io
 from docx import Document
 
-# --- CONFIGURATION ---
+# --- 1. CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Expert ROLL", page_icon="📖")
 
-# --- INITIALISATION GROQ ---
+# --- 2. INITIALISATION DU MOTEUR (GROQ) ---
+# Assurez-vous d'avoir GROQ_API_KEY dans les Secrets de Streamlit
 api_key = os.environ.get("GROQ_API_KEY")
 
 if not api_key:
-    st.info("Veuillez configurer la GROQ_API_KEY dans les Secrets.")
+    st.title("🤖 Expert ROLL")
+    st.info("👋 Veuillez configurer la GROQ_API_KEY dans les Secrets pour commencer.")
     st.stop()
 
 client = Groq(api_key=api_key)
 
-# --- FONCTION WORD ---
+# --- 3. FONCTION DE CRÉATION DU DOCUMENT WORD ---
 def create_docx(text, cycle_name):
     doc = Document()
+    
+    # Titre principal
     doc.add_heading(f"Fiche ACT ROLL - {cycle_name}", 0)
+    
+    # Parcours du texte pour mise en page simple
     for line in text.split('\n'):
-        if line.strip():
-            doc.add_paragraph(line.replace('*', '').replace('#', ''))
+        clean_line = line.replace('*', '').replace('#', '').strip()
+        if not clean_line:
+            continue
+            
+        if any(word.isupper() for word in clean_line.split()[:2]) and len(clean_line) < 60:
+            doc.add_heading(clean_line, level=1)
+        elif line.strip().startswith(('-', '•', '*')):
+            doc.add_paragraph(clean_line, style='List Bullet')
+        else:
+            doc.add_paragraph(clean_line)
+            
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
     return buffer
 
-# --- INTERFACE ---
-st.title("🤖 Expert ROLL (Moteur Llama 3)")
-cycle = st.radio("Cycle :", ["Cycle 2", "Cycle 3"])
-uploaded_file = st.file_uploader("Fichier texte (Word ou PDF)", type=['docx', 'pdf'])
+# --- 4. INTERFACE UTILISATEUR ---
+st.title("🤖 Expert ROLL")
+st.caption("Moteur : Llama 3.3 (Stable & Rapide)")
 
-if uploaded_file and st.button("🚀 Générer la fiche"):
-    with st.spinner('Analyse pédagogique en cours...'):
-        try:
-            # Lecture du fichier Word
-            if uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-                doc_in = Document(uploaded_file)
-                content = "\n".join([p.text for p in doc_in.paragraphs])
-            else:
-                # Pour le PDF ou texte simple (fallback)
-                content = uploaded_file.read().decode("utf-8", errors="ignore")
+cycle = st.radio("Niveau scolaire :", ["Cycle 2 (CP-CE2)", "Cycle 3 (CM1-6ème)"])
+uploaded_file = st.file_uploader("Charger le texte (Format Word .docx)", type=['docx'])
 
-            prompt = f"""Tu es un expert pédagogique du ROLL. 
-            Conçois un ACT pour le {cycle} à partir de ce texte. 
-            Structure : Analyse des obstacles, 3 questions d'émergence, tableau de débat.
-            Texte : {content}"""
-
-            # Appel à Groq (Llama 3.3 70B est excellent)
-            completion = client.chat.completions.create(
-                model="llama-3.3-70b-specdec",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7
-            )
-
-            result = completion.choices[0].message.content
-            
-            st.markdown(result)
-            
-            # Bouton Word
-            docx_buffer = create_docx(result, cycle)
-            st.download_button("📥 Télécharger en Word", data=docx_buffer, file_name="ACT_ROLL.docx")
-
-        except Exception as e:
-            st.error(f"Une erreur est survenue : {e}")
+# --- 5. GÉNÉRATION ---
+if uploaded_file and st.button("🚀 Générer
