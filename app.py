@@ -18,13 +18,12 @@ if not api_key:
 genai.configure(api_key=api_key)
 model = genai.GenerativeModel('gemini-2.5-flash')
 
-# --- 2. MOTEUR DE RENDU WORD INTELLIGENT ---
+# --- 2. MOTEUR DE RENDU WORD ---
 def create_roll_docx_faithful(text_content, cycle_name):
     doc = Document()
     doc.styles['Normal'].font.name = 'Arial'
     doc.styles['Normal'].font.size = Pt(11)
 
-    # Titre
     title = doc.add_heading(f"FICHE ENSEIGNANT : ACT TYPE 1 - {cycle_name}", 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
@@ -33,11 +32,9 @@ def create_roll_docx_faithful(text_content, cycle_name):
         clean_line = line.strip()
         if not clean_line: continue
 
-        # Gestion des Titres
         if clean_line.startswith(('#', '1.', '2.', '3.', '4.')) or "PHASE" in clean_line.upper():
             doc.add_heading(clean_line.replace('#', '').strip(), level=1)
         
-        # Détection et création de TABLEAU (si l'IA utilise des séparateurs | )
         elif "|" in clean_line and "---" not in clean_line:
             parts = [p.strip() for p in clean_line.split("|") if p.strip()]
             if len(parts) >= 2:
@@ -46,7 +43,6 @@ def create_roll_docx_faithful(text_content, cycle_name):
                 for i, part in enumerate(parts):
                     table.rows[0].cells[i].text = part
         
-        # Gestion du Gras
         elif '**' in clean_line:
             p = doc.add_paragraph()
             parts = clean_line.split('**')
@@ -54,7 +50,6 @@ def create_roll_docx_faithful(text_content, cycle_name):
                 run = p.add_run(part)
                 if i % 2 != 0: run.bold = True
         
-        # Listes
         elif clean_line.startswith(('-', '*', '•')):
             doc.add_paragraph(clean_line.strip('-*• ').strip(), style='List Bullet')
         
@@ -72,7 +67,7 @@ cycle = st.radio("Cycle concerné :", ["Cycle 2", "Cycle 3"])
 uploaded_file = st.file_uploader("Support (Word, PDF ou Photo)", type=['docx', 'pdf', 'jpg', 'jpeg', 'png'])
 
 if uploaded_file and st.button("🚀 Générer la fiche complète"):
-    with st.spinner('Construction de la fiche avec tableau pré-rempli...'):
+    with st.spinner('Construction de la fiche...'):
         try:
             raw_content = ""
             file_data = None
@@ -85,10 +80,23 @@ if uploaded_file and st.button("🚀 Générer la fiche complète"):
             else:
                 file_data = {"mime_type": uploaded_file.type, "data": uploaded_file.getvalue()}
 
-            # PROMPT AVEC DEMANDE EXPLICITE DE TABLEAU PRÉ-REMPLI
-            instruction = f"""Agis en tant qu'expert pédagogique du ROLL. Rédige une fiche enseignant complète pour un ACT de type 1 (narratif) pour le {cycle}.
-            Respecte scrupuleusement les 4 phases. 
+            # CONSTRUCTION DU PROMPT SÉCURISÉE
+            instruction = f"Agis en tant qu'expert pédagogique du ROLL. Rédige une fiche enseignant complète pour un ACT de type 1 (narratif) pour le {cycle}. "
+            instruction += "Respecte scrupuleusement les 4 phases (Identification, Objectifs, Déroulement en 4 phases, Prolongements). "
+            instruction += "IMPORTANT pour la Phase 2 : Génère un tableau pré-rempli pour l'enseignant avec des exemples de propositions probables des élèves, classées en 3 colonnes : 'Ce qu'on sait (certitudes)', 'On n'est pas d'accord (controverses)', 'On ne sait pas (zones d'ombre)'. "
             
-            IMPORTANT pour la Phase 2 : 
-            Génère un tableau pré-rempli pour l'enseignant avec des exemples de propositions probables des élèves, classées en 3 colonnes : 
-            - "Ce qu'on sait (certitudes)"
+            if file_data:
+                prompt_final = [instruction + " Analyse l'image jointe.", file_data]
+            else:
+                prompt_final = instruction + f" Texte de référence : {raw_content}"
+
+            response = model.generate_content(prompt_final)
+            
+            st.markdown("---")
+            st.markdown(response.text)
+            
+            docx_output = create_roll_docx_faithful(response.text, cycle)
+            st.download_button(label="📥 Télécharger la Fiche Word", data=docx_output, file_name=f"ACT_ROLL_{cycle}.docx")
+            
+        except Exception as e:
+            st.error(f"Erreur : {e}")
